@@ -13,6 +13,10 @@ func NewInMemStcDB() *StcDB {
 	return &StcDB{Conn: sqlx.MustConnect("sqlite3", ":memory:")}
 }
 
+func NewStcDB() *StcDB {
+	return &StcDB{Conn: sqlx.MustConnect("sqlite3", "stc.db")}
+}
+
 func (s *StcDB) Migrate() {
 	s.Conn.MustExec(`
 	CREATE TABLE IF NOT EXISTS "buckets" (
@@ -26,10 +30,10 @@ func (s *StcDB) Migrate() {
 	CREATE TABLE IF NOT EXISTS "bucket_data" (
 		"bucket_id"	INTEGER NOT NULL,
 		"connector_run_id" INTEGER,
-		"created_at" TEXT,
 		"raw" BLOB,
-		"type" TEXT,
-		"meta" TEXT
+		"raw_type" INTEGER,
+		"meta" TEXT,
+		"created_at" TEXT
 	);
 	`)
 
@@ -48,7 +52,7 @@ func (s *StcDB) Migrate() {
 	CREATE TABLE IF NOT EXISTS "connector_runs" (
 		"id"	INTEGER NOT NULL,
 		"connector_id"	INTEGER NOT NULL,
-		"error"	TEXT,
+		"error"	TEXT NOT NULL ,
 		"started_at"	TEXT,
 		"finished_at"	TEXT,
 		PRIMARY KEY("id" AUTOINCREMENT)

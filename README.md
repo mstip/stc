@@ -8,7 +8,7 @@ go build -o dist/stc cmd/stc/main.go && ./dist/stc
 ``` 
 Intigration tests
 ```
-go test test/int/*
+go test -t 10m test/int/*
 ```
 
 ## Structure

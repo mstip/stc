@@ -1,10 +1,13 @@
 package int
 
 import (
+	"fmt"
 	"reflect"
 	"stc/internal/bucket"
 	"stc/internal/connector"
 	"stc/internal/storage"
+	"stc/internal/utils"
+	"strings"
 	"testing"
 	"time"
 )
@@ -25,8 +28,9 @@ func TestFEM(t *testing.T) {
 
 	expBuc := bucket.Bucket{ID: 1, Name: "fem_raise_bucket"}
 	expConn := connector.Connector{ID: 1, ConnType: connector.CONECTOR_TYPE_WEBTEXT, BucketID: 1, Trigger: connector.TRIGGER_MANUAL, Params: connector.WebTextConnectorParams("https://raise-ai-mindsets.de/")}
-	expConnRun := connector.ConnectorRun{ID: 1, ConnectorID: 1, Error: "", StartedAt: time.Now()}
+	expConnRun := connector.ConnectorRun{ID: 1, ConnectorID: 1, Error: "", StartedAt: utils.NewDBTimeNow()}
 	stcDB := storage.NewInMemStcDB()
+	// stcDB := storage.NewStcDB()
 	stcDB.Migrate()
 
 	// 1. Create Bucket for page
@@ -40,7 +44,7 @@ func TestFEM(t *testing.T) {
 	}
 
 	// 2. Add webtext Connector to bucket with url configure to gather manual
-	conn, err := connector.CreateConnector(stcDB, buc.ID, connector.CONECTOR_TYPE_WEBTEXT, connector.TRIGGER_MANUAL, connector.WebTextConnectorParams(expConn.Params["url"]))
+	conn, err := connector.CreateConnector(stcDB, buc.ID, connector.CONECTOR_TYPE_WEBTEXT, connector.TRIGGER_MANUAL, connector.WebTextConnectorParams(expConn.Params.M["url"]))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,9 +59,41 @@ func TestFEM(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if expConnRun.ID != connRun.ID || expConnRun.ConnectorID != connRun.ConnectorID || expConnRun.Error != connRun.Error || connRun.StartedAt.Before(expConnRun.StartedAt) {
+	if expConnRun.ID != connRun.ID || expConnRun.ConnectorID != connRun.ConnectorID || expConnRun.Error != connRun.Error || connRun.StartedAt.T.Before(expConnRun.StartedAt.T) {
 		t.Fatalf("RunConnector expected %#v, got %#v", expConnRun, connRun)
 	}
+	for {
+		cr, err := connector.QueryConnectorRunByID(stcDB, connRun.ID)
+		if err != nil {
+			t.Fatal(err)
+			break
+		}
+		if cr.FinishedAt.T.After(cr.StartedAt.T) {
+			break
+		}
+		fmt.Println(time.Since(cr.StartedAt.T).Seconds(), time.Since(cr.StartedAt.T).Minutes())
+		if time.Since(cr.StartedAt.T).Minutes() >= 5 {
+			t.Fatal("timeout")
+		}
+		time.Sleep(5 * time.Second)
+	}
+	bucketData, err := bucket.QueryBucketDataByBucketID(stcDB, buc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	// TODO: check in loop if connrun is done or died with an error timeout 5 min
+	if len(bucketData) == 0 {
+		t.Fatal("no bucket data found")
+	}
+
+	if bucketData[0].BucketID != buc.ID ||
+		bucketData[0].ConnectorRunID != connRun.ID ||
+		string(bucketData[0].Raw) == "" ||
+		bucketData[0].RType != bucket.RAW_TYPE_TEXT ||
+		!strings.HasPrefix(bucketData[0].Meta.M["url"], "https://raise-ai-mindsets.de/") ||
+		bucketData[0].CreatedAt.T.Before(connRun.StartedAt.T) {
+		t.Fatalf("bucket data is wrong %#v", bucketData[0])
+	}
+
+	// 4. Create Store, Type AI with Text Vector and meta data url
 }
